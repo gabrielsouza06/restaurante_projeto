@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Lista de Pratos - Restaurante</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f8f9fa; color: #333; }
+        h1 { color: #2c3e50; }
+        .btn { display: inline-block; padding: 10px 15px; background: #27ae60; color: white; text-decoration: none; border-radius: 4px; margin-bottom: 20px; }
+        .btn:hover { background: #219653; }
+        ul { list-style: none; padding: 0; }
+        li { background: white; padding: 15px; margin-bottom: 10px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <h1>Cardápio - Pratos Disponíveis</h1>
+    <a href="{% url 'criar_prato' %}" class="btn">+ Cadastrar Novo Prato</a>
+    <a href="{% url 'lista_pedidos' %}" class="btn" style="background: #2980b9;">Ver Pedidos</a>
+
+    <ul>
+        {% for prato in pratos %}
+            <li>
+                <strong>{{ prato.nome }}</strong> - R$ {{ prato.preco }}<br>
+                <small>Categoria: {{ prato.categoria }} | Tempo de Preparo: {{ prato.tempo_preparo_minutos }} min</small>
+            </li>
+        {% empty %}
+            <li>Nenhum prato cadastrado ainda. Utilize o painel administrativo ou o botão acima para adicionar.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
