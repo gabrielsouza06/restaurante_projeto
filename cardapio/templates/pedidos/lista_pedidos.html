@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Lista de Pedidos - Restaurante</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f8f9fa; color: #333; }
+        h1 { color: #2c3e50; }
+        .btn { display: inline-block; padding: 10px 15px; background: #27ae60; color: white; text-decoration: none; border-radius: 4px; margin-bottom: 20px; }
+        .btn:hover { background: #219653; }
+        ul { list-style: none; padding: 0; }
+        li { background: white; padding: 15px; margin-bottom: 10px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        a.detalhe { color: #2980b9; text-decoration: none; font-weight: bold; }
+        a.detalhe:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Painel de Pedidos</h1>
+    <a href="{% url 'criar_pedido' %}" class="btn">+ Novo Pedido</a>
+    <a href="{% url 'lista_pratos' %}" class="btn" style="background: #34495e;">Ver Cardápio de Pratos</a>
+
+    <ul>
+        {% for pedido in pedidos %}
+            <li>
+                <strong>Pedido #{{ pedido.id }}</strong> - Cliente: {{ pedido.cliente_nome }}<br>
+                Status: {{ pedido.status }} | Modalidade: {{ pedido.modalidade_atendimento }}<br>
+                <small>Criado em: {{ pedido.data_hora_criacao }}</small><br>
+                <a href="{% url 'detalhe_pedido' pedido.pk %}" class="detalhe">Ver Detalhes / Adicionar Itens</a>
+            </li>
+        {% empty %}
+            <li>Nenhum pedido registrado até o momento.</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

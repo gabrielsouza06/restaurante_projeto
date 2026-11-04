@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Detalhes do Pedido #{{ pedido.id }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f8f9fa; color: #333; }
+        .card { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; }
+        h1 { color: #2c3e50; }
+        .btn { display: inline-block; padding: 8px 12px; background: #2980b9; color: white; text-decoration: none; border-radius: 4px; margin-top: 15px; }
+        .btn:hover { background: #1f618d; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Pedido #{{ pedido.id }}</h1>
+        <p><strong>Cliente:</strong> {{ pedido.cliente_nome }}</p>
+        <p><strong>Atendimento:</strong> {{ pedido.tipo_atendente }} (Modalidade: {{ pedido.modalidade_atendimento }})</p>
+        <p><strong>Status:</strong> {{ pedido.status }}</p>
+        <p><strong>Data/Hora:</strong> {{ pedido.data_hora_criacao }}</p>
+        
+        <hr>
+        <h3>Itens do Pedido</h3>
+        <p><em>(Em breve: listagem de itens e sub-totais aqui)</em></p>
+
+        <a href="{% url 'lista_pedidos' %}" class="btn">Voltar para Lista de Pedidos</a>
+    </div>
+</body>
+</html>
