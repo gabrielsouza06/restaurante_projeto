@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatórios do Restaurante</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f8f9fa; color: #333; }
+        .container { max-width: 850px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.08); }
+        h1 { color: #2c3e50; margin-top: 0; }
+        pre { background: #1e272e; color: #f5f6fa; padding: 15px; border-radius: 6px; overflow-x: auto; line-height: 1.5; }
+        .btn { display: inline-block; padding: 8px 14px; background: #2980b9; color: white; text-decoration: none; border-radius: 4px; margin-bottom: 15px; }
+        .btn:hover { background: #1f618d; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <a href="{% url 'lista_pedidos' %}" class="btn">← Voltar para Pedidos</a>
+    <a href="{% url 'lista_pratos' %}" class="btn">Ver Cardápio</a>
+
+    <div class="card">
+        <h1>Relatórios Gerenciais</h1>
+        <pre>{{ saida_relatorios }}</pre>
+    </div>
+</div>
+</body>
+</html>

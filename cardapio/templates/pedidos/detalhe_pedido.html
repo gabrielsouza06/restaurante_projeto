@@ -5,25 +5,178 @@
     <title>Detalhes do Pedido #{{ pedido.id }}</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; background-color: #f8f9fa; color: #333; }
-        .card { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; }
-        h1 { color: #2c3e50; }
-        .btn { display: inline-block; padding: 8px 12px; background: #2980b9; color: white; text-decoration: none; border-radius: 4px; margin-top: 15px; }
+        .container { max-width: 750px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h1, h2, h3 { color: #2c3e50; margin-top: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; border-bottom: 1px solid #e0e0e0; text-align: left; }
+        th { background-color: #f1f3f5; }
+        .btn { display: inline-block; padding: 8px 12px; background: #2980b9; color: white; text-decoration: none; border: none; border-radius: 4px; margin-top: 10px; cursor: pointer; font-size: 14px; }
         .btn:hover { background: #1f618d; }
+        .btn-verde { background: #27ae60; }
+        .btn-verde:hover { background: #219653; }
+        .btn-vermelho { background: #c0392b; padding: 5px 10px; font-size: 12px; margin-top: 0; }
+        .btn-vermelho:hover { background: #a93226; }
+        .campo { margin-bottom: 12px; }
+        label { display: block; font-weight: bold; margin-bottom: 4px; }
+        input[type="text"], input[type="number"], select, textarea {
+            width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
+        }
+        .total-box { font-size: 17px; font-weight: bold; margin-top: 12px; color: #27ae60; }
+        .nota-box { background: #eafaf1; border-left: 4px solid #27ae60; padding: 12px; border-radius: 4px; }
     </style>
 </head>
 <body>
+<div class="container">
     <div class="card">
         <h1>Pedido #{{ pedido.id }}</h1>
         <p><strong>Cliente:</strong> {{ pedido.cliente_nome }}</p>
         <p><strong>Atendimento:</strong> {{ pedido.tipo_atendente }} (Modalidade: {{ pedido.modalidade_atendimento }})</p>
         <p><strong>Status:</strong> {{ pedido.status }}</p>
         <p><strong>Data/Hora:</strong> {{ pedido.data_hora_criacao }}</p>
-        
+
         <hr>
         <h3>Itens do Pedido</h3>
-        <p><em>(Em breve: listagem de itens e sub-totais aqui)</em></p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Qtd</th>
+                    <th>Observação</th>
+                    <th>Subtotal</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item_ped in itens_pedido %}
+                <tr>
+                    <td>{{ item_ped.item_cardapio.nome }}</td>
+                    <td>{{ item_ped.quantidade }}</td>
+                    <td>{{ item_ped.observacao|default:"-" }}</td>
+                    <td>R$ {{ item_ped.calcular_subtotal|floatformat:2 }}</td>
+                    <td>
+                        <form method="post" action="{% url 'remover_item_pedido' pedido.pk item_ped.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-vermelho">Remover</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5">Nenhum item adicionado até o momento.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="total-box">Total: R$ {{ total_pedido|floatformat:2 }}</div>
+
+        <hr>
+        <h3>Adicionar Item</h3>
+        <form method="post" action="{% url 'adicionar_item_pedido' pedido.pk %}">
+            {% csrf_token %}
+            <div class="campo">
+                <label for="item_cardapio_id">Item do Cardápio</label>
+                <select name="item_cardapio_id" id="item_cardapio_id" required>
+                    {% for item in itens_cardapio %}
+                        <option value="{{ item.id }}">{{ item.nome }} - R$ {{ item.preco }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="campo">
+                <label for="quantidade">Quantidade</label>
+                <input type="number" name="quantidade" id="quantidade" min="1" value="1" required>
+            </div>
+            <div class="campo">
+                <label for="observacao">Observação</label>
+                <input type="text" name="observacao" id="observacao" placeholder="Ex.: sem cebola...">
+            </div>
+            <button type="submit" class="btn btn-verde">+ Adicionar Item</button>
+        </form>
 
         <a href="{% url 'lista_pedidos' %}" class="btn">Voltar para Lista de Pedidos</a>
+        <a href="{% url 'relatorios' %}" class="btn btn-verde">Ver Relatórios</a>
     </div>
+
+    <div class="card">
+        <h2>Devoluções</h2>
+        <ul>
+            {% for dev in devolucoes %}
+                <li style="margin-bottom: 6px;">
+                    {{ dev.obter_resumo_devolucao }} — <em>"{{ dev.justificativa }}"</em>
+                </li>
+            {% empty %}
+                <li>Nenhuma devolução registrada.</li>
+            {% endfor %}
+        </ul>
+
+        <hr>
+        <h3>Registrar Devolução</h3>
+        <form method="post" action="{% url 'registrar_devolucao' pedido.pk %}">
+            {% csrf_token %}
+            <div class="campo">
+                <label for="dev_item">Item Devolvido</label>
+                <select name="item_cardapio_id" id="dev_item" required>
+                    {% for item in itens_cardapio %}
+                        <option value="{{ item.id }}">{{ item.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="campo">
+                <label for="justificativa">Justificativa</label>
+                <textarea name="justificativa" id="justificativa" rows="2" required placeholder="Motivo da devolução..."></textarea>
+            </div>
+            <div class="campo">
+                <label>
+                    <input type="checkbox" name="aprovada"> Devolução aprovada
+                </label>
+            </div>
+            <button type="submit" class="btn btn-vermelho">Registrar Devolução</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Fechamento de Conta / Nota Fiscal</h2>
+        {% if nota %}
+            <div class="nota-box">
+                <p><strong>Nota Fiscal #{{ nota.id }}</strong> — {% if nota.quitada %}Quitada{% else %}Pendente{% endif %}</p>
+                <p><strong>Forma de Pagamento:</strong> {{ nota.get_forma_pagamento_display }}</p>
+                <p><strong>Valor Total:</strong> R$ {{ nota.valor_total|floatformat:2 }}</p>
+                <p><strong>Tempo de Atendimento:</strong> {{ nota.calcular_tempo_atendimento_minutos|floatformat:1 }} min</p>
+                <p><strong>Tempo de Permanência:</strong> {{ nota.calcular_permanencia_minutos|floatformat:1 }} min</p>
+            </div>
+        {% else %}
+            <form method="post" action="{% url 'fechar_conta' pedido.pk %}">
+                {% csrf_token %}
+                <div class="campo">
+                    <label for="forma_pagamento">Forma de Pagamento</label>
+                    <select name="forma_pagamento" id="forma_pagamento">
+                        <option value="CARTAO">Cartão de Crédito</option>
+                        <option value="DINHEIRO">Dinheiro em Espécie</option>
+                        <option value="CHEQUE">Cheque</option>
+                    </select>
+                </div>
+                <div class="campo">
+                    <label for="bandeira">Bandeira (se Cartão)</label>
+                    <input type="text" name="bandeira" id="bandeira" value="Visa">
+                </div>
+                <div class="campo">
+                    <label for="numero_cartao">Número do Cartão (se Cartão)</label>
+                    <input type="text" name="numero_cartao" id="numero_cartao" value="4111111111111234">
+                </div>
+                <div class="campo">
+                    <label for="valor_entregue">Valor Entregue (se Dinheiro)</label>
+                    <input type="number" step="0.01" name="valor_entregue" id="valor_entregue" placeholder="Ex.: 100.00">
+                </div>
+                <div class="campo">
+                    <label for="banco">Banco / Nº Cheque (se Cheque)</label>
+                    <input type="text" name="banco" id="banco" placeholder="Ex.: Banco do Brasil" style="margin-bottom: 6px;">
+                    <input type="text" name="numero_cheque" id="numero_cheque" placeholder="Ex.: 000456">
+                </div>
+                <button type="submit" class="btn btn-verde">Fechar Conta e Emitir Nota</button>
+            </form>
+        {% endif %}
+    </div>
+</div>
 </body>
 </html>
