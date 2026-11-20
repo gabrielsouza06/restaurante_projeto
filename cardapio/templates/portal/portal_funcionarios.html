@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Portal dos Funcionários - Restaurante</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background: #f4f6f9; color: #333; }
+        .container { max-width: 1050px; margin: auto; }
+        .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        .card { background: white; padding: 20px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        h1, h2, h3 { color: #2c3e50; margin-top: 0; }
+        .btn { display: inline-block; padding: 8px 14px; background: #2980b9; color: white; text-decoration: none; border-radius: 4px; border: none; cursor: pointer; font-size: 14px; }
+        .btn:hover { background: #1f618d; }
+        .btn-verde { background: #27ae60; }
+        .btn-roxo { background: #8e44ad; }
+        .btn-cinza { background: #7f8c8d; }
+        .grid-hierarquia { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+        .cargo-card { border-left: 4px solid #2980b9; background: #f8fafc; padding: 14px; border-radius: 4px; }
+        .nivel-tag { font-size: 11px; text-transform: uppercase; color: #7f8c8d; font-weight: bold; }
+        .cargo-titulo { font-size: 16px; font-weight: bold; color: #2c3e50; margin: 4px 0; }
+        .mesa-badge { display: inline-block; padding: 6px 10px; border-radius: 4px; margin: 4px; font-size: 13px; }
+        .livre { background: #eafaf1; border: 1px solid #27ae60; color: #1e8449; }
+        .ocupada { background: #fdedec; border: 1px solid #c0392b; color: #922b21; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; border-bottom: 1px solid #e0e0e0; text-align: left; }
+        th { background: #f1f3f5; }
+        .msg { background: #eafaf1; border-left: 4px solid #27ae60; padding: 12px; margin-bottom: 15px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="topbar">
+        <div>
+            <h1>Portal Operacional — Funcionários</h1>
+            <small>Acesso interno da equipe conforme hierarquia de cargos</small>
+        </div>
+        <div>
+            <a href="{% url 'lista_pedidos' %}" class="btn">Pedidos</a>
+            <a href="{% url 'lista_pratos' %}" class="btn btn-verde">Gerenciar Cardápio</a>
+            <a href="{% url 'relatorios' %}" class="btn btn-roxo">Relatórios Gerenciais</a>
+            <a href="{% url 'portal_clientes' %}" class="btn btn-cinza">Ir para Área do Cliente</a>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="msg">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="card">
+        <h2>Hierarquia da Equipe (ABC Funcionario)</h2>
+        <form method="get" style="margin-bottom: 15px;">
+            <label for="cargo"><strong>Filtrar por Cargo:</strong></label>
+            <select name="cargo" id="cargo" onchange="this.form.submit()" style="padding: 6px; margin-left: 8px;">
+                <option value="">Todos os cargos (8 níveis)</option>
+                {% for c in cargos_disponiveis %}
+                    <option value="{{ c }}" {% if cargo_selecionado == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </form>
+
+        <div class="grid-hierarquia">
+            {% for item in equipe %}
+                <div class="cargo-card">
+                    <div class="nivel-tag">{{ item.nivel }}</div>
+                    <div class="cargo-titulo">{{ item.obj.cargo }} — {{ item.obj.nome }}</div>
+                    <p style="font-size: 13px; margin: 6px 0;">{{ item.obj.descrever_funcao }}</p>
+                    <small style="color: #555;">{{ item.obj.registrar_ponto }}</small>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Mapa do Salão, Regiões e Mesas</h2>
+        {% for regiao in regioes %}
+            <div style="margin-bottom: 12px;">
+                <strong>{{ regiao.nome }}</strong>
+                <div>
+                    {% for mesa in regiao.mesas.all %}
+                        <span class="mesa-badge {% if mesa.ocupada %}ocupada{% else %}livre{% endif %}">
+                            Mesa {{ mesa.numero }} ({{ mesa.capacidade }} lug.) —
+                            {% if mesa.ocupada %}Ocupada{% else %}Livre{% endif %}
+                            {% if mesa.garcom_responsavel_nome %}| Garçom: {{ mesa.garcom_responsavel_nome }}{% endif %}
+                        </span>
+                    {% empty %}
+                        <small>Nenhuma mesa cadastrada nesta região.</small>
+                    {% endfor %}
+                </div>
+            </div>
+        {% empty %}
+            <p>Nenhuma região cadastrada. Cadastre regiões e mesas no <code>/admin/</code>.</p>
+        {% endfor %}
+    </div>
+
+    <div class="card">
+        <h2>Fila do Manobrista (Ordens do Gerente)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Ordem</th>
+                    <th>Cliente</th>
+                    <th>Instrução do Gerente</th>
+                    <th>Manobrista</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ordem in ordens_manobrista %}
+                    <tr>
+                        <td>#{{ ordem.id }}</td>
+                        <td>{{ ordem.cliente_nome }}</td>
+                        <td>{{ ordem.descricao_ordem }}</td>
+                        <td>{{ ordem.manobrista_nome }}</td>
+                        <td>
+                            <form method="post" action="{% url 'concluir_ordem_manobrista' ordem.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-verde">Entregar Veículo</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5">Nenhuma ordem pendente na portaria.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Pedidos em Andamento</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Pedido</th>
+                    <th>Cliente</th>
+                    <th>Mesa / Modalidade</th>
+                    <th>Status</th>
+                    <th>Acesso</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ped in pedidos_abertos %}
+                    <tr>
+                        <td>#{{ ped.id }}</td>
+                        <td>{{ ped.cliente_nome }}</td>
+                        <td>{% if ped.mesa %}Mesa {{ ped.mesa.numero }}{% else %}{{ ped.modalidade_atendimento }}{% endif %}</td>
+                        <td>{{ ped.status }}</td>
+                        <td><a href="{% url 'detalhe_pedido' ped.id %}" class="btn">Gerenciar Pedido</a></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5">Nenhum pedido aberto no momento.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

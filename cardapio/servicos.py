@@ -1,114 +1,259 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from collections import defaultdict
+from decimal import Decimal
+from typing import Protocol
+
+from django.db import transaction
 from django.utils import timezone
-from .models import NotaFiscal, Devolucao
+
+from .funcionarios import GerenteGeneral, Manobrista
+from .models import Devolucao, NotaFiscal, OrdemGerente, Pedido
+
+
+class GeradorRelatorioInterface(Protocol):
+    """Interface explícita para contratos de relatórios gerenciais."""
+
+    def relatorio_tempo_medio_por_garcom(self) -> list[dict]:
+        ...
+
+    def relatorio_itens_mais_devolvidos(self) -> list[dict]:
+        ...
 
 
 class FormaPagamento(ABC):
-    """Interface / Classe Abstrata para formas de pagamento do restaurante."""
+    """Classe abstrata para métodos de pagamento (polimorfismo)."""
+
+    def __init__(self, valor: Decimal):
+        self.valor = Decimal(str(valor))
+        if self.valor < Decimal("0.00"):
+            raise ValueError("O valor do pagamento não pode ser negativo.")
 
     @abstractmethod
-    def processar_pagamento(self, valor: float) -> bool:
-        pass
-
-    @abstractmethod
-    def obter_descricao(self) -> str:
-        pass
+    def processar(self) -> dict:
+        """Executa o processamento específico da forma de pagamento."""
 
 
-class CartaoCredito(FormaPagamento):
-    def __init__(self, numero_cartao: str, bandeira: str):
-        self.__numero_cartao = numero_cartao
-        self.__bandeira = bandeira
+class PagamentoCartao(FormaPagamento):
+    def __init__(self, valor: Decimal, bandeira: str = "Visa", numero_cartao: str = ""):
+        super().__init__(valor)
+        self.bandeira = bandeira.strip() or "Cartão"
+        digitos = "".join(ch for ch in numero_cartao if ch.isdigit())
+        self.__ultimos_digitos = digitos[-4:] if len(digitos) >= 4 else "0000"
 
-    def processar_pagamento(self, valor: float) -> bool:
-        final = self.__numero_cartao[-4:] if len(self.__numero_cartao) >= 4 else self.__numero_cartao
-        print(f"Transação de R$ {valor:.2f} aprovada no Cartão {self.__bandeira} (Final {final}).")
-        return True
-
-    def obter_descricao(self) -> str:
-        return f"Cartão de Crédito ({self.__bandeira})"
-
-
-class Cheque(FormaPagamento):
-    def __init__(self, numero_cheque: str, banco: str):
-        self.__numero_cheque = numero_cheque
-        self.__banco = banco
-
-    def processar_pagamento(self, valor: float) -> bool:
-        print(f"Cheque nº {self.__numero_cheque} ({self.__banco}) compensado: R$ {valor:.2f}.")
-        return True
-
-    def obter_descricao(self) -> str:
-        return f"Cheque ({self.__banco})"
+    def processar(self) -> dict:
+        return {
+            "metodo": "CARTAO",
+            "aprovado": True,
+            "valor": float(self.valor),
+            "mensagem": f"Aprovado no cartão {self.bandeira} (final {self.__ultimos_digitos}).",
+        }
 
 
-class Dinheiro(FormaPagamento):
-    def __init__(self, valor_entregue: float):
-        self.__valor_entregue = valor_entregue
+class PagamentoDinheiro(FormaPagamento):
+    def __init__(self, valor: Decimal, valor_entregue: Decimal | None = None):
+        super().__init__(valor)
+        self.valor_entregue = Decimal(str(valor_entregue)) if valor_entregue is not None else self.valor
 
-    def processar_pagamento(self, valor: float) -> bool:
-        if self.__valor_entregue >= valor:
-            troco = self.__valor_entregue - valor
-            print(f"Pagamento em Dinheiro: R$ {self.__valor_entregue:.2f}. Troco: R$ {troco:.2f}.")
-            return True
-        print(f"Valor insuficiente! Faltam R$ {valor - self.__valor_entregue:.2f}.")
-        return False
+    def processar(self) -> dict:
+        if self.valor_entregue < self.valor:
+            return {
+                "metodo": "DINHEIRO",
+                "aprovado": False,
+                "valor": float(self.valor),
+                "troco": 0.0,
+                "mensagem": "Valor entregue insuficiente para quitar o pedido.",
+            }
+        troco = (self.valor_entregue - self.valor).quantize(Decimal("0.01"))
+        return {
+            "metodo": "DINHEIRO",
+            "aprovado": True,
+            "valor": float(self.valor),
+            "troco": float(troco),
+            "mensagem": f"Recebido em dinheiro. Troco: R$ {troco:.2f}.",
+        }
 
-    def obter_descricao(self) -> str:
-        return "Dinheiro em Espécie"
+
+class PagamentoCheque(FormaPagamento):
+    def __init__(self, valor: Decimal, banco: str = "", numero_cheque: str = ""):
+        super().__init__(valor)
+        self.banco = banco.strip() or "Banco não informado"
+        self.numero_cheque = numero_cheque.strip() or "S/N"
+
+    def processar(self) -> dict:
+        return {
+            "metodo": "CHEQUE",
+            "aprovado": True,
+            "valor": float(self.valor),
+            "mensagem": f"Cheque nº {self.numero_cheque} ({self.banco}) registrado para compensação.",
+        }
 
 
-def fechar_conta_pedido(pedido, metodo_pagamento: FormaPagamento, codigo_tipo: str, hora_atendimento=None) -> NotaFiscal:
-    total = float(pedido.calcular_total())
-    aprovado = metodo_pagamento.processar_pagamento(total)
-
-    nota = NotaFiscal.objects.create(
-        pedido=pedido,
-        forma_pagamento=codigo_tipo,
-        valor_total=total,
-        hora_chegada=pedido.data_hora_criacao,
-        hora_atendimento=hora_atendimento or timezone.now(),
-        hora_saida=timezone.now(),
-        quitada=aprovado,
+def criar_processador_pagamento(forma_pagamento: str, valor: Decimal, dados: dict) -> FormaPagamento:
+    forma = (forma_pagamento or "CARTAO").upper()
+    if forma == "DINHEIRO":
+        raw_entregue = dados.get("valor_entregue")
+        valor_entregue = Decimal(str(raw_entregue)) if raw_entregue not in (None, "") else valor
+        return PagamentoDinheiro(valor, valor_entregue=valor_entregue)
+    if forma == "CHEQUE":
+        return PagamentoCheque(
+            valor,
+            banco=dados.get("banco", ""),
+            numero_cheque=dados.get("numero_cheque", ""),
+        )
+    return PagamentoCartao(
+        valor,
+        bandeira=dados.get("bandeira", "Visa"),
+        numero_cartao=dados.get("numero_cartao", ""),
     )
 
-    if aprovado:
-        pedido.status = "CONCLUIDO"
-        pedido.save()
-        print("NOTA QUITADA - GERENTE NOTIFICADO PARA LIBERAR VEÍCULO NA PORTARIA.")
 
-    return nota
+def fechar_conta_pedido(
+    pedido: Pedido,
+    forma_pagamento: str,
+    dados_pagamento: dict | None = None,
+    gerente_nome: str = "Gerente Geral",
+    manobrista_nome: str = "Manobrista Portaria",
+    placa_veiculo: str = "",
+) -> dict:
+    if hasattr(pedido, "nota_fiscal") and pedido.nota_fiscal.quitada:
+        return {
+            "sucesso": False,
+            "mensagem": "Esta conta já foi quitada anteriormente.",
+            "nota": pedido.nota_fiscal,
+            "ordem_gerente": None,
+        }
+
+    dados = dados_pagamento or {}
+    total_decimal = Decimal(str(pedido.calcular_total())).quantize(Decimal("0.01"))
+    processador = criar_processador_pagamento(forma_pagamento, total_decimal, dados)
+    resultado_pgto = processador.processar()
+
+    if not resultado_pgto.get("aprovado", False):
+        return {
+            "sucesso": False,
+            "mensagem": resultado_pgto.get("mensagem", "Pagamento não aprovado."),
+            "nota": None,
+            "ordem_gerente": None,
+        }
+
+    agora = timezone.now()
+    hora_chegada = pedido.data_hora_criacao or agora
+    hora_atendimento = pedido.data_hora_inicio_atendimento or agora
+
+    with transaction.atomic():
+        nota, _ = NotaFiscal.objects.update_or_create(
+            pedido=pedido,
+            defaults={
+                "forma_pagamento": (forma_pagamento or "CARTAO").upper(),
+                "valor_total": total_decimal,
+                "hora_chegada": hora_chegada,
+                "hora_atendimento": hora_atendimento,
+                "hora_saida": agora,
+                "quitada": True,
+            },
+        )
+
+        pedido.status = "Fechado / Pago"
+        if pedido.mesa:
+            pedido.mesa.ocupada = False
+            pedido.mesa.save(update_fields=["ocupada"])
+        pedido.save(update_fields=["status"])
+
+        gerente = GerenteGeneral(matricula=1, nome=gerente_nome)
+        manobrista = Manobrista(matricula=2, nome=manobrista_nome)
+        descricao = gerente.emitir_ordem_manobrista(
+            manobrista=manobrista,
+            cliente_nome=pedido.cliente_nome,
+            nota_id=nota.id,
+            placa_veiculo=placa_veiculo,
+        )
+
+        ordem = OrdemGerente.objects.create(
+            gerente_nome=gerente.nome,
+            manobrista_nome=manobrista.nome,
+            cliente_nome=pedido.cliente_nome,
+            descricao_ordem=descricao,
+        )
+
+    return {
+        "sucesso": True,
+        "mensagem": resultado_pgto.get("mensagem", "Conta fechada com sucesso."),
+        "nota": nota,
+        "ordem_gerente": ordem,
+    }
 
 
 class GerenciadorRelatorios:
-    @staticmethod
-    def relatorio_tempo_medio_por_garcom():
-        print("\n--- [RELATÓRIO A] TEMPO MÉDIO DE ATENDIMENTO POR ATENDENTE ---")
-        dados: Dict[str, List[float]] = {}
+    """Implementa GeradorRelatorioInterface para métricas gerenciais."""
 
-        for nota in NotaFiscal.objects.select_related("pedido").all():
-            atendente = getattr(nota.pedido, "tipo_atendente", "Não informado")
-            tempo = nota.calcular_tempo_atendimento_minutos()
-            dados.setdefault(atendente, []).append(tempo)
+    def relatorio_tempo_medio_por_garcom(self) -> list[dict]:
+        notas = NotaFiscal.objects.select_related("pedido", "pedido__mesa").all()
+        grupos: dict[tuple, list[float]] = defaultdict(list)
 
-        for atendente, tempos in dados.items():
-            media = sum(tempos) / len(tempos)
-            print(f"Atendente: {atendente:<15} | Pedidos: {len(tempos):<2} | Tempo Médio: {media:.1f} min")
-        print("--------------------------------------------------------------\n")
+        for nota in notas:
+            pedido = nota.pedido
+            chave = (
+                pedido.atendente_id or "sem_id",
+                pedido.tipo_atendente or "Atendente",
+                pedido.mesa.garcom_responsavel_nome if pedido.mesa and pedido.mesa.garcom_responsavel_nome else "",
+            )
+            grupos[chave].append(nota.calcular_tempo_atendimento_minutos())
 
-    @staticmethod
-    def relatorio_itens_mais_devolvidos():
-        print("\n--- [RELATÓRIO B] ITENS MAIS DEVOLVIDOS E MOTIVOS ---")
-        contagem: Dict[str, int] = {}
-        motivos: Dict[str, List[str]] = {}
+        resultado = []
+        for (atendente_id, tipo_atendente, garcom_mesa), tempos in grupos.items():
+            media = sum(tempos) / len(tempos) if tempos else 0.0
+            nome_exibicao = garcom_mesa or f"{tipo_atendente} (ID: {atendente_id})"
+            resultado.append(
+                {
+                    "atendente": nome_exibicao,
+                    "tipo_atendente": tipo_atendente,
+                    "quantidade_pedidos": len(tempos),
+                    "tempo_medio_minutos": round(media, 2),
+                }
+            )
+        return resultado
 
-        for dev in Devolucao.objects.select_related("item_cardapio").all():
-            nome_item = dev.item_cardapio.nome
-            contagem[nome_item] = contagem.get(nome_item, 0) + 1
-            motivos.setdefault(nome_item, []).append(dev.justificativa)
+    def relatorio_itens_mais_devolvidos(self) -> list[dict]:
+        devolucoes = Devolucao.objects.select_related("item_cardapio", "pedido").all()
+        contagem: dict[int, dict] = {}
 
-        for item, qtd in sorted(contagem.items(), key=lambda x: x[1], reverse=True):
-            print(f"Item: {item:<20} | Qtd Devoluções: {qtd}")
-            print(f"   Justificativas: {', '.join(motivos[item])}")
-        print("-----------------------------------------------------\n")
+        for dev in devolucoes:
+            item_id = dev.item_cardapio.id
+            if item_id not in contagem:
+                contagem[item_id] = {
+                    "item_nome": dev.item_cardapio.nome,
+                    "total_devolucoes": 0,
+                    "aprovadas": 0,
+                }
+            contagem[item_id]["total_devolucoes"] += 1
+            if dev.aprovada:
+                contagem[item_id]["aprovadas"] += 1
+
+        return sorted(
+            contagem.values(),
+            key=lambda x: x["total_devolucoes"],
+            reverse=True,
+        )
+
+    def emitir_relatorios_console(self) -> str:
+        linhas = [
+            "=== RELATÓRIOS GERENCIAIS DO RESTAURANTE ===",
+            "",
+            "--- 1. Tempo Médio de Atendimento por Garçom ---",
+        ]
+        for row in self.relatorio_tempo_medio_por_garcom():
+            linhas.append(
+                f"* {row['atendente']} [{row['tipo_atendente']}]: "
+                f"{row['tempo_medio_minutos']} min ({row['quantidade_pedidos']} pedido(s))"
+            )
+
+        linhas.extend(["", "--- 2. Itens Mais Devolvidos ---"])
+        for row in self.relatorio_itens_mais_devolvidos():
+            linhas.append(
+                f"* {row['item_nome']}: {row['total_devolucoes']} devolução(ões) "
+                f"({row['aprovadas']} aprovada(s))"
+            )
+
+        texto = "\n".join(linhas)
+        print(texto)
+        return texto

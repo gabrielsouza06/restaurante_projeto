@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Cardápio & Pedido Online - Restaurante</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background: #faf8f5; color: #333; }
+        .container { max-width: 900px; margin: auto; }
+        .header { background: #2c3e50; color: white; padding: 24px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .link-equipe { color: #bdc3c7; font-size: 13px; text-decoration: none; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.07); margin-bottom: 20px; }
+        h2 { color: #2c3e50; border-bottom: 2px solid #f0ece6; padding-bottom: 8px; margin-top: 0; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+        .item-card { border: 1px solid #eee; border-radius: 6px; padding: 14px; background: #fffdf9; }
+        .preco { color: #27ae60; font-weight: bold; font-size: 16px; margin-top: 6px; }
+        .campo { margin-bottom: 12px; }
+        label { display: block; font-weight: bold; margin-bottom: 4px; }
+        input, select { width: 100%; padding: 9px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .btn-pedir { background: #e67e22; color: white; border: none; padding: 12px 20px; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; }
+        .btn-pedir:hover { background: #d35400; }
+        .alerta { background: #fef9e7; border-left: 4px solid #f39c12; padding: 12px; margin-bottom: 15px; border-radius: 4px; }
+        .sucesso { background: #eafaf1; border-left: 4px solid #27ae60; padding: 14px; margin-bottom: 15px; border-radius: 4px; }
+        .erro { background: #fdedec; border-left: 4px solid #c0392b; padding: 12px; margin-bottom: 15px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div>
+            <h1>Bem-vindo ao Nosso Restaurante</h1>
+            <small>Confira o cardápio disponível hoje e faça seu pedido</small>
+        </div>
+        <a href="{% url 'portal_funcionarios' %}" class="link-equipe">Acesso Funcionários &rarr;</a>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="{% if message.tags == 'error' %}erro{% else %}sucesso{% endif %}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    {% if alerta_bebida %}
+        <div class="alerta">
+            <strong>Sugestão do Sommelier:</strong> {{ alerta_bebida }} Que tal incluir um suco ou refrigerante abaixo?
+        </div>
+    {% endif %}
+
+    {% if pedido_criado %}
+        <div class="sucesso">
+            <h3 style="margin-top: 0;">Resumo do Seu Pedido #{{ pedido_criado.id }}</h3>
+            <p><strong>Cliente:</strong> {{ pedido_criado.cliente_nome }} | <strong>Status:</strong> {{ pedido_criado.status }}</p>
+            {% if pedido_criado.mesa %}
+                <p><strong>Mesa Reservada:</strong> Mesa {{ pedido_criado.mesa.numero }} ({{ pedido_criado.mesa.regiao.nome }})</p>
+            {% endif %}
+            <p><strong>Total Estimado:</strong> R$ {{ pedido_criado.calcular_total|floatformat:2 }}</p>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <h2>Pratos Disponíveis Hoje</h2>
+        <div class="grid">
+            {% for prato in pratos_hoje %}
+                <div class="item-card">
+                    <strong>{{ prato.nome }}</strong><br>
+                    <small>{{ prato.categoria }} • Preparo: ~{{ prato.tempo_preparo_minutos }} min</small>
+                    <div class="preco">R$ {{ prato.preco_efetivo|floatformat:2 }}</div>
+                </div>
+            {% empty %}
+                <p>Nenhum prato disponível para o dia de hoje.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Bebidas Disponíveis Hoje</h2>
+        <div class="grid">
+            {% for bebida in bebidas_hoje %}
+                <div class="item-card">
+                    <strong>{{ bebida.nome }}</strong><br>
+                    <small>{{ bebida.volume_ml }} ml • {% if bebida.eh_alcoolica %}Alcoólica{% else %}Sem álcool{% endif %}</small>
+                    <div class="preco">R$ {{ bebida.preco_efetivo|floatformat:2 }}</div>
+                </div>
+            {% empty %}
+                <p>Nenhuma bebida disponível para o dia de hoje.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Fazer Meu Pedido</h2>
+        <form method="post">
+            {% csrf_token %}
+            <div class="campo">
+                <label for="cliente_nome">Seu Nome</label>
+                <input type="text" name="cliente_nome" id="cliente_nome" required placeholder="Digite seu nome">
+            </div>
+
+            <div class="campo">
+                <label for="modalidade_atendimento">Como deseja ser atendido?</label>
+                <select name="modalidade_atendimento" id="modalidade_atendimento">
+                    <option value="Salão">No Salão (escolher mesa)</option>
+                    <option value="Retirada">Retirada no Balcão</option>
+                    <option value="Delivery">Delivery</option>
+                </select>
+            </div>
+
+            <div class="campo">
+                <label for="mesa_id">Mesas Livres no Momento (opcional)</label>
+                <select name="mesa_id" id="mesa_id">
+                    <option value="">-- Sem mesa / Retirada / Delivery --</option>
+                    {% for mesa in mesas_livres %}
+                        <option value="{{ mesa.id }}">Mesa {{ mesa.numero }} ({{ mesa.regiao.nome }} - {{ mesa.capacidade }} lugares)</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="campo">
+                <label for="prato_id">Escolha um Prato</label>
+                <select name="prato_id" id="prato_id">
+                    <option value="">-- Nenhum prato --</option>
+                    {% for prato in pratos_hoje %}
+                        <option value="{{ prato.id }}">{{ prato.nome }} — R$ {{ prato.preco_efetivo|floatformat:2 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="campo">
+                <label for="qtd_prato">Quantidade do Prato</label>
+                <input type="number" name="qtd_prato" id="qtd_prato" min="1" value="1">
+            </div>
+
+            <div class="campo">
+                <label for="bebida_id">Acompanhar com Bebida</label>
+                <select name="bebida_id" id="bebida_id">
+                    <option value="">-- Nenhuma bebida --</option>
+                    {% for bebida in bebidas_hoje %}
+                        <option value="{{ bebida.id }}">{{ bebida.nome }} ({{ bebida.volume_ml }}ml) — R$ {{ bebida.preco_efetivo|floatformat:2 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="campo">
+                <label for="qtd_bebida">Quantidade da Bebida</label>
+                <input type="number" name="qtd_bebida" id="qtd_bebida" min="1" value="1">
+            </div>
+
+            <div class="campo">
+                <label for="observacao">Alguma observação para a cozinha?</label>
+                <input type="text" name="observacao" id="observacao" placeholder="Ex.: sem cebola, ponto da carne...">
+            </div>
+
+            <button type="submit" class="btn-pedir">Enviar Pedido</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

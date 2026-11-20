@@ -24,14 +24,38 @@
         }
         .total-box { font-size: 17px; font-weight: bold; margin-top: 12px; color: #27ae60; }
         .nota-box { background: #eafaf1; border-left: 4px solid #27ae60; padding: 12px; border-radius: 4px; }
+        .ordem-box { background: #eef6fc; border-left: 4px solid #2980b9; padding: 12px; border-radius: 4px; margin-top: 14px; }
     </style>
 </head>
 <body>
 <div class="container">
+    {% if messages %}
+        {% for message in messages %}
+            <div class="card" style="padding: 12px; border-left: 4px solid #2980b9; margin-bottom: 12px;">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    {% if alerta_bebida %}
+        <div class="card" style="padding: 12px; border-left: 4px solid #e67e22; background: #fef9e7; margin-bottom: 12px;">
+            <strong>Regra de Bebidas:</strong> {{ alerta_bebida }}
+        </div>
+    {% endif %}
+
     <div class="card">
         <h1>Pedido #{{ pedido.id }}</h1>
         <p><strong>Cliente:</strong> {{ pedido.cliente_nome }}</p>
         <p><strong>Atendimento:</strong> {{ pedido.tipo_atendente }} (Modalidade: {{ pedido.modalidade_atendimento }})</p>
+        <p>
+            <strong>Mesa:</strong>
+            {% if pedido.mesa %}
+                Mesa {{ pedido.mesa.numero }} ({{ pedido.mesa.regiao }})
+                {% if pedido.mesa.garcom_responsavel_nome %}— Garçom: {{ pedido.mesa.garcom_responsavel_nome }}{% endif %}
+            {% else %}
+                Sem mesa vinculada
+            {% endif %}
+        </p>
         <p><strong>Status:</strong> {{ pedido.status }}</p>
         <p><strong>Data/Hora:</strong> {{ pedido.data_hora_criacao }}</p>
 
@@ -91,6 +115,12 @@
                 <label for="observacao">Observação</label>
                 <input type="text" name="observacao" id="observacao" placeholder="Ex.: sem cebola...">
             </div>
+            <div class="campo">
+                <label style="font-weight: normal;">
+                    <input type="checkbox" name="forcar_indisponivel">
+                    Permitir adicionar mesmo se não estiver disponível hoje
+                </label>
+            </div>
             <button type="submit" class="btn btn-verde">+ Adicionar Item</button>
         </form>
 
@@ -127,7 +157,7 @@
                 <textarea name="justificativa" id="justificativa" rows="2" required placeholder="Motivo da devolução..."></textarea>
             </div>
             <div class="campo">
-                <label>
+                <label style="font-weight: normal;">
                     <input type="checkbox" name="aprovada"> Devolução aprovada
                 </label>
             </div>
@@ -173,8 +203,26 @@
                     <input type="text" name="banco" id="banco" placeholder="Ex.: Banco do Brasil" style="margin-bottom: 6px;">
                     <input type="text" name="numero_cheque" id="numero_cheque" placeholder="Ex.: 000456">
                 </div>
+                <div class="campo">
+                    <label for="placa_veiculo">Placa do Veículo (Ordem ao Manobrista — opcional)</label>
+                    <input type="text" name="placa_veiculo" id="placa_veiculo" placeholder="Ex.: ABC-1D23">
+                </div>
                 <button type="submit" class="btn btn-verde">Fechar Conta e Emitir Nota</button>
             </form>
+        {% endif %}
+
+        {% if ordens_recentes %}
+            <div class="ordem-box">
+                <h3>Ordens Emitidas ao Manobrista</h3>
+                <ul style="margin-bottom: 0;">
+                    {% for ordem in ordens_recentes %}
+                        <li>
+                            <strong>{{ ordem.criada_em|date:"d/m/Y H:i" }}</strong> —
+                            {{ ordem.descricao_ordem }} (Manobrista: {{ ordem.manobrista_nome }})
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
         {% endif %}
     </div>
 </div>

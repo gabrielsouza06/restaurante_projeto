@@ -9,6 +9,7 @@ urlpatterns = [
     # Cardápio
     path('pratos/', views.lista_pratos, name='lista_pratos'),
     path('pratos/novo/', views.criar_prato, name='criar_prato'),
+    path('bebidas/nova/', views.criar_bebida, name='criar_bebida'),
 
     # Pedidos
     path('pedidos/', views.lista_pedidos, name='lista_pedidos'),
@@ -25,4 +26,9 @@ urlpatterns = [
     # Fechamento de Conta / Nota Fiscal & Relatórios
     path('pedidos/<int:pk>/fechar-conta/', views.fechar_conta_view, name='fechar_conta'),
     path('relatorios/', views.relatorios_view, name='relatorios'),
+
+    # portal_funcionarios
+    path("funcionarios/", views.portal_funcionarios, name="portal_funcionarios"),
+    path("funcionarios/ordem/<int:ordem_id>/concluir/", views.concluir_ordem_manobrista, name="concluir_ordem_manobrista"),
+    path("cliente/", views.portal_clientes, name="portal_clientes"),
 ]

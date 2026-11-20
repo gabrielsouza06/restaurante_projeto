@@ -1,5 +1,6 @@
 from django import forms
-from .models import Bebida, Pedido, Prato, RotaEntrega
+
+from .models import Bebida, Mesa, Pedido, Prato, RotaEntrega
 
 DIAS_SEMANA_CHOICES = [
     ("Segunda", "Segunda-feira"),
@@ -75,12 +76,20 @@ class BebidaForm(forms.ModelForm):
 
 
 class PedidoForm(forms.ModelForm):
+    mesa = forms.ModelChoiceField(
+        queryset=Mesa.objects.select_related("regiao").order_by("numero"),
+        required=False,
+        label="Mesa (se atendimento no salão)",
+    )
+
     class Meta:
         model = Pedido
         fields = [
             "cliente_nome",
+            "atendente_id",
             "tipo_atendente",
             "modalidade_atendimento",
+            "mesa",
             "eh_agendado",
             "data_hora_agendada",
         ]
@@ -93,7 +102,12 @@ class RotaEntregaForm(forms.ModelForm):
     enderecos_texto = forms.CharField(
         label="Endereços de entrega",
         required=False,
-        widget=forms.Textarea(attrs={"rows": 4, "placeholder": "Um endereço por linha\nEx.: Rua A, 120\nAv. Central, 45"}),
+        widget=forms.Textarea(
+            attrs={
+                "rows": 4,
+                "placeholder": "Um endereço por linha\nEx.: Rua A, 120\nAv. Central, 45",
+            }
+        ),
     )
 
     class Meta:
